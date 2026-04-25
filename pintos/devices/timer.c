@@ -111,7 +111,7 @@ void timer_sleep (int64_t ticks){
 	intr_set_level(old_level); // 나중에 깨어난 뒤 interrut 상태를 원래대로 복구
 }
 
-/* Suspends execution for approximately TICKS timer ticks. */
+/* ==========Suspends execution for approximately TICKS timer ticks. ===========*/
 /*void <- 원래 있던 타이머 슬립 [비지 웨이팅 방식] 
 timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
@@ -119,7 +119,7 @@ timer_sleep (int64_t ticks) {
 	ASSERT (intr_get_level () == INTR_ON);
 	while (timer_elapsed (start) < ticks)
 		thread_yield ();
-}*/
+}================================================================================*/
 
 /* Suspends execution for approximately MS milliseconds. */
 void
@@ -145,12 +145,31 @@ timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
-/* Timer interrupt handler. */
+
+static void
+timer_interrupt (struct intr_frame *args UNUSED) {
+	ticks++;
+
+	while (!list_empty (&sleep_list)) { // 자고 있는 스레드가 있는 동안 
+		struct thread *t = list_entry (list_front (&sleep_list), // 가장 빨리 깨어날 스레드를 본다
+			struct thread, elem); 
+
+		if (t->wakeup_tick > ticks) // 맨앞 스레드가 깰시간이 아니면 뒤는 볼 필요도 없다
+			break;
+
+		list_pop_front (&sleep_list); // 슬립리스트에서 제거 
+		thread_unblock (t); // 레디로 보낸다 
+	}
+	thread_tick ();
+}
+
+
+/* ===========Timer interrupt handler. <- 기존 인터럽트 ======
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
-}
+}==========================================================*/
 
 /* Returns true if LOOPS iterations waits for more than one timer
    tick, otherwise false. */
