@@ -32,6 +32,11 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+#define DONATION_DEPTH 8
+
+static void donate_priority_chain (struct thread *donor);
+static void remove_donations_for_lock (struct lock *lock);
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -41,6 +46,41 @@
 
    - up or "V": increment the value (and wake up one waiting
    thread, if any). */
+
+static void
+donate_priority_chain (struct thread *donor) {
+	int depth;
+
+	for (depth = 0; depth < DONATION_DEPTH; depth++) {
+		struct lock *lock = donor->waiting_lock;
+		struct thread *holder;
+
+		if (lock == NULL || lock->holder == NULL)
+			break;
+
+		holder = lock->holder;
+		thread_update_priority (holder);
+		donor = holder;
+	}
+}
+
+static void
+remove_donations_for_lock (struct lock *lock) {
+	struct thread *curr = thread_current ();
+	struct list_elem *e = list_begin (&curr->donations);
+
+	while (e != list_end (&curr->donations)) {
+		struct thread *donor = list_entry (e, struct thread, donation_elem);
+		struct list_elem *next = list_next (e);
+
+		if (donor->waiting_lock == lock)
+			list_remove (e);
+		e = next;
+	}
+
+	thread_update_priority (curr);
+}
+
 void
 sema_init (struct semaphore *sema, unsigned value) {
 	ASSERT (sema != NULL);
@@ -194,12 +234,24 @@ lock_init (struct lock *lock) {
    we need to sleep. */
 void
 lock_acquire (struct lock *lock) {
+	struct thread *curr = thread_current ();
+	enum intr_level old_level;
+
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
+	old_level = intr_disable ();
+	if (lock->holder != NULL) {
+		curr->waiting_lock = lock;
+		list_push_back (&lock->holder->donations, &curr->donation_elem);
+		donate_priority_chain (curr);
+	}
+	intr_set_level (old_level);
+
 	sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+	curr->waiting_lock = NULL;
+	lock->holder = curr;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -229,10 +281,16 @@ lock_try_acquire (struct lock *lock) {
    handler. */
 void
 lock_release (struct lock *lock) {
+	enum intr_level old_level;
+
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 
+	old_level = intr_disable ();
+	remove_donations_for_lock (lock);
 	lock->holder = NULL;
+	intr_set_level (old_level);
+
 	sema_up (&lock->semaphore);
 }
 

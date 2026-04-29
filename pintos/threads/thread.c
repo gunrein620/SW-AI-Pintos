@@ -324,6 +324,23 @@ thread_get_priority (void) {
 	return thread_current ()->priority;
 }
 
+/* Recalculates T's effective priority from its base priority and donors. */
+void
+thread_update_priority (struct thread *t) {
+	struct list_elem *e;
+
+	ASSERT (t != NULL);
+
+	t->priority = t->base_priority;
+	for (e = list_begin (&t->donations); e != list_end (&t->donations);
+		 e = list_next (e)) {
+		struct thread *donor = list_entry (e, struct thread, donation_elem);
+
+		if (donor->priority > t->priority)
+			t->priority = donor->priority;
+	}
+}
+
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice UNUSED) {
@@ -412,6 +429,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	t->base_priority = priority;
+	list_init (&t->donations);
+	t->waiting_lock = NULL;
 	t->magic = THREAD_MAGIC;
 }
 
