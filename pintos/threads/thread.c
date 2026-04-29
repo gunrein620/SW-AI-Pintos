@@ -329,16 +329,18 @@ thread_set_priority (int new_priority) {
 	struct thread *curr = thread_current ();
 	bool should_yield;
 
-	/* priority 변경과 ready_list 검사를 한 덩어리로 처리. */
+	/* original_priority 갱신 + refresh_priority 재계산 + ready_list 검사를
+	   atomic하게 처리. donation으로 받은 priority가 있으면 refresh_priority가
+	   그쪽을 우선으로 살린다. ready_list가 cmp_priority로 정렬돼 있으므로
+	   list_front가 곧 최고 우선순위. */
 	old_level = intr_disable ();
-	curr->priority = new_priority;
+	curr->original_priority = new_priority;
+	refresh_priority ();
 	should_yield = !list_empty (&ready_list)
 		&& list_entry (list_front (&ready_list),
 				struct thread, elem)->priority > curr->priority;
 	intr_set_level (old_level);
 
-	/* yield 결정은 락 밖에서. ready_list가 cmp_priority로 정렬돼 있으므로
-	   list_front가 곧 최고 우선순위. */
 	if (should_yield)
 		thread_yield ();
 }
@@ -426,6 +428,29 @@ kernel_thread (thread_func *function, void *aux) {
 
 /* Does basic initialization of T as a blocked thread named
    NAME. */
+
+/* 스레드 T를 BLOCKED 상태의 기본 스레드로 초기화한다.
+ *
+ * NAME: 디버깅용 스레드 이름
+ * PRIORITY: 스레드의 초기 우선순위 (PRI_MIN ~ PRI_MAX)
+ *
+ * 초기화 항목:
+ * - 스레드 구조체 전체를 0으로 초기화 (memset)
+ * - 상태: THREAD_BLOCKED (생성 직후 대기 상태) 
+ * - 이름, 스택 포인터, 우선순위 설정
+ *
+ * Priority Donation 관련:
+ * - original_priority: donation 이전 원래 우선순위 보존용
+ *                      lock 반환 시 복원 기준값으로 사용
+ * - wait_on_lock: 현재 기다리는 lock 포인터
+ *                 NULL = 아무 lock도 기다리지 않음
+ *                 nested donation에서 체인 탐색에 사용
+ * - donations: 이 스레드에게 priority를 기부한 스레드들의 리스트
+ *              multiple donation 처리 및 lock 반환 시
+ *              effective priority 재계산에 사용
+ *
+ * 주의: 이 함수 호출 후 thread_unblock()을 통해
+ *       READY 상태로 전환해야 스케줄링 대상이 된다. */
 static void
 init_thread (struct thread *t, const char *name, int priority) {
 	ASSERT (t != NULL);
@@ -437,6 +462,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	/* Priority Donation 관련 초기화 */
+	t->original_priority = priority;  /* 원래 우선순위 저장 */
+	t->wait_on_lock = NULL;           /* 기다리는 lock 없음 */
+	list_init(&t->donations);         /* donation 리스트 초기화 */
 	t->magic = THREAD_MAGIC;
 }
 
