@@ -28,6 +28,40 @@ static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
+#define ARGV_MAX 64
+
+static void
+argument_stack (char **argv, int argc, struct intr_frame *_if) {
+	uintptr_t arg_addr[ARGV_MAX];
+	uint8_t *rsp = (uint8_t *) _if->rsp;
+	int i;
+
+	for (i = argc - 1; i >= 0; i--) {
+		size_t len = strlen (argv[i]) + 1;
+		rsp -= len;
+		memcpy (rsp, argv[i], len);
+		arg_addr[i] = (uintptr_t) rsp;
+	}
+
+	rsp = (uint8_t *) ((uintptr_t) rsp & ~(uintptr_t) 7);
+
+	rsp -= sizeof (uintptr_t);
+	*(uintptr_t *) rsp = 0;
+
+	for (i = argc - 1; i >= 0; i--) {
+		rsp -= sizeof (uintptr_t);
+		*(uintptr_t *) rsp = arg_addr[i];
+	}
+
+	_if->R.rsi = (uint64_t) rsp;
+	_if->R.rdi = (uint64_t) argc;
+
+	rsp -= sizeof (uintptr_t);
+	*(uintptr_t *) rsp = 0;
+
+	_if->rsp = (uintptr_t) rsp;
+}
+
 /* General process initializer for initd and other process. */
 static void
 process_init (void) {
@@ -166,6 +200,10 @@ process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
 
+	char *argv[ARGV_MAX];
+	int   argc = 0;
+	char *token, *save_ptr;
+
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
 	 * it stores the execution information to the member. */
@@ -177,15 +215,24 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 
-	/* And then load the binary */
-	success = load (file_name, &_if);
+	for (token = strtok_r (file_name, " ", &save_ptr);
+	     token != NULL && argc < ARGV_MAX;
+	     token = strtok_r (NULL, " ", &save_ptr))
+		argv[argc++] = token;
 
-	/* If load failed, quit. */
-	palloc_free_page (file_name);
-	if (!success)
+	strlcpy (thread_current ()->name, argv[0],
+	         sizeof thread_current ()->name);
+
+	success = load (argv[0], &_if);
+
+	if (!success) {
+		palloc_free_page (file_name);
 		return -1;
+	}
 
-	/* Start switched process. */
+	argument_stack (argv, argc, &_if);
+	palloc_free_page (file_name);
+
 	do_iret (&_if);
 	NOT_REACHED ();
 }
@@ -196,45 +243,48 @@ process_exec (void *f_name) {
  * exception), returns -1.  If TID is invalid or if it was not a
  * child of the calling process, or if process_wait() has already
  * been successfully called for the given TID, returns -1
- * immediately, without waiting.
- *
- * This function will be implemented in problem 2-2.  For now, it
- * does nothing. */
-/* stage 0 임시 구현 (자식 추적 없음).
- *
- * 왜 이렇게:
- *   현재처럼 -1 즉시 반환하면, init 스레드가 process_wait(initd)에서
- *   바로 복귀 → main이 power_off()로 머신을 끈다. 그 결과 자식 프로세스가
- *   putbuf()로 찍은 stdout 출력이 채 콘솔에 도달하기 전에 종료되어
- *   "테스트 결과를 볼 수 없는" 상태가 된다.
- *
- * 해결(최소):
- *   값이 0인 로컬 세마포어를 sema_down 하여 부모를 영구 블록한다.
- *   - 자식이 thread_exit/process_exit으로 마무리되며 출력은 그대로 콘솔로 나간다.
- *   - 부모는 wake되지 않으므로 kernel은 timeout 또는 외부 종료 시까지 alive.
- *   - 자식 list / exit_status 회수 / 좀비 정리는 정식 wait 구현 단계에서 추가.
- *
- * 한계:
- *   진짜 "child_tid가 끝날 때까지" 동기화하지는 않는다. stage 0 디버깅 출력
- *   확인용 스캐폴딩이며, multi-child 시나리오/정확한 exit code 반환은 이후 단계. */
+ * immediately, without waiting. */
 int
-process_wait (tid_t child_tid UNUSED) {
-	struct semaphore stub;
-	sema_init(&stub, 0);
-	sema_down(&stub);
-	return -1;
+process_wait (tid_t child_tid) {
+	struct thread *cur = thread_current ();
+	struct thread *child = NULL;
+	struct list_elem *e;
+	int exit_status;
+
+	for (e = list_begin (&cur->children); e != list_end (&cur->children);
+	     e = list_next (e)) {
+		struct thread *t = list_entry (e, struct thread, child_elem);
+		if (t->tid == child_tid) {
+			child = t;
+			break;
+		}
+	}
+	if (child == NULL)
+		return -1;
+
+	sema_down (&child->wait_sema);
+	exit_status = child->exit_status;
+	list_remove (&child->child_elem);
+	sema_up (&child->exit_sema);
+
+	return exit_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
 void
 process_exit (void) {
 	struct thread *curr = thread_current ();
-	/* TODO: Your code goes here.
-	 * TODO: Implement process termination message (see
-	 * TODO: project2/process_termination.html).
-	 * TODO: We recommend you to implement process resource cleanup here. */
+	bool is_user_process = (curr->pml4 != NULL);
+
+	if (is_user_process)
+		printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
 
 	process_cleanup ();
+
+	if (is_user_process) {
+		sema_up (&curr->wait_sema);
+		sema_down (&curr->exit_sema);
+	}
 }
 
 /* Free the current process's resources. */
