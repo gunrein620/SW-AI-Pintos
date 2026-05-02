@@ -188,14 +188,63 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 
+	char *argv[64];
+	int argc = 0;
+	char *token;
+	char *save_ptr;
+	
+	for (token = strtok_r (file_name, " ", &save_ptr);
+			 token != NULL;
+			 token = strtok_r (NULL, " ", &save_ptr)) {
+		argv[argc++] = token;
+	}
+
 	/* And then load the binary */
 	success = load (argv[0], &_if, argc, argv);
 
 	/* If load failed, quit. */
-	palloc_free_page (file_name);
-	if (!success)
+	if (!success) {
+		palloc_free_page (file_name);
 		return -1;
+	}
 
+	char *arg_addr[64];
+
+	for (int i = argc - 1; i >= 0; i--) {
+		size_t len = strlen (argv[i]) + 1;
+		_if.rsp -= len;
+		memcpy ((void *) _if.rsp, argv[i], len);
+		arg_addr[i] = (char *) _if.rsp;
+	}
+
+	/* Align stack to 8 bytes. */
+	while (_if.rsp % 8 != 0) {
+		_if.rsp--;
+		*(uint8_t *) _if.rsp = 0;
+	}
+	
+	/* Push argv[argc] = NULL. */
+	_if.rsp -= sizeof (char *);
+	*(char **) _if.rsp = NULL;
+	
+	/* Push argv[i] pointers. */
+	for (int i = argc - 1; i >= 0; i--) {
+		_if.rsp -= sizeof (char *);
+		*(char **) _if.rsp = arg_addr[i];
+	}
+	
+	/* Save argv start address. */
+	char **argv_start = (char **) _if.rsp;
+	
+	/* Pass argc and argv to _start(argc, argv). */
+	_if.R.rdi = argc;
+	_if.R.rsi = (uint64_t) argv_start;
+
+	_if.rsp -= sizeof (void *);
+	*(void **) _if.rsp = 0;
+
+	palloc_free_page (file_name);
+	
 	/* Start switched process. */
 	do_iret (&_if);
 	NOT_REACHED ();
