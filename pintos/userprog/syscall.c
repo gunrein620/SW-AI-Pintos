@@ -56,6 +56,7 @@ validate_user_addr (const void *uaddr) {
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	uint64_t sysno = f->R.rax;
+	printf("syscall!\n");
 
 	switch (sysno) {
 		case SYS_WRITE: {

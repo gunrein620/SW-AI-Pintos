@@ -177,8 +177,20 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 
+	char *argv[64];                 /* 공백으로 나눈 인자 문자열들의 주소를 임시로 저장할 커널 배열 */
+	int argc = 0;                   /* 현재까지 찾은 인자 개수 */
+	char *token;                    /* strtok_r()가 이번에 잘라낸 단어를 가리킬 포인터 */
+	char *save_ptr;                 /* strtok_r()가 다음 탐색 위치를 기억하기 위해 사용하는 포인터 */
+	
+	for (token = strtok_r (file_name, " ", &save_ptr);   /* file_name의 첫 번째 단어를 공백 기준으로 찾는다 */
+			 token != NULL;                                  /* 더 이상 단어가 없으면 반복을 끝낸다 */
+			 token = strtok_r (NULL, " ", &save_ptr)) {      /* 이전 위치 다음부터 다음 단어를 계속 찾는다 */
+		argv[argc++] = token;                              /* 찾은 단어 주소를 argv에 저장하고 argc를 1 증가시킨다 */
+	}
+	
+
 	/* And then load the binary */
-	success = load (file_name, &_if);
+	success = load (argv[0], &_if);
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
