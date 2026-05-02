@@ -262,9 +262,10 @@ process_exec (void *f_name) {
  * does nothing. */
 int
 process_wait (tid_t child_tid UNUSED) {
-	struct semaphore stub;
-	sema_init(&stub, 0);
-	sema_down(&stub);
+	// struct semaphore stub;
+	// sema_init(&stub, 0);
+	// sema_down(&stub);
+	timer_sleep(100);
 	return -1;
 }
 
@@ -392,6 +393,19 @@ load (const char *file_name, struct intr_frame *if_, int argc, char **argv) {
 	(void) argc;
 	(void) argv;
 
+	char *argv[64];
+	int argc = 0;
+	char *token, *save_ptr;
+
+	for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr))
+	{
+		argv[argc++] = token;
+	}
+
+	argv[argc] = NULL;
+	uint64_t rsp_arr[argc];
+	memcpy(thread_current()->process_name, argv[0], sizeof(thread_current()->process_name));
+
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
@@ -479,6 +493,29 @@ load (const char *file_name, struct intr_frame *if_, int argc, char **argv) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+
+	for (int i = argc - 1; i >= 0; i--) {
+		size_t len = strlen(argv[i]) + 1;
+		if_->rsp -= len;
+		rsp_arr[i] = if_->rsp;
+		memcpy((void *)if_->rsp, argv[i], len);
+	}
+
+	if_->rsp = if_->rsp & ~0xF;
+
+	if_->rsp -= 8;
+	memset(if_->rsp, 0, sizeof(char **));
+
+	for (int i = argc - 1; i >= 0; i--) {
+		if_->rsp -= 8;
+		memcpy(if_->rsp, &rsp_arr[i], sizeof(char **));
+	}
+
+	if_->rsp -= 8;
+	memset(if_->rsp, 0, sizeof(void *));
+
+	if_->R.rdi = argc;
+	if_->R.rsi = if_->rsp + 8;
 
 	success = true;
 
