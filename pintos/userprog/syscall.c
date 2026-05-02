@@ -81,6 +81,17 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			}
 			break;
 		}
+		case SYS_EXIT: {
+			int status = (int) f->R.rdi;
+			struct thread *curr = thread_current();
+			// char *pos = strchr(curr->name, '\n');
+			// if (pos != NULL) {
+			// 	*pos = '\0';
+			// }
+			printf("%s: exit(%d)\n", curr->process_name, status);
+			thread_exit();
+			break;
+		}
 		default:
 			/* 아직 라우팅 안 된 시스템 콜.
 			 * 디버깅 가시성을 위해 한 줄 찍고 종료. */
