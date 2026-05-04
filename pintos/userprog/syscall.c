@@ -6,8 +6,10 @@
 #include "threads/loader.h"
 #include "threads/init.h"
 #include "userprog/gdt.h"
+#include "filesys/filesys.h"
 #include "threads/flags.h"
 #include "threads/vaddr.h"
+#include "threads/mmu.h"
 #include "intrinsic.h"
 
 void syscall_entry (void);
@@ -41,8 +43,10 @@ syscall_init (void) {
 
 static void
 validate_user_addr (const void *uaddr) {
-	if (uaddr == NULL || !is_user_vaddr(uaddr))
+	if (uaddr == NULL || !is_user_vaddr(uaddr) || pml4_get_page(thread_current()->pml4, uaddr) == NULL) {
+		thread_current()->exit_status = -1;
 		thread_exit();
+	}
 }
 
 void
@@ -74,6 +78,15 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			} else {
 				f->R.rax = (uint64_t) -1;
 			}
+			break;
+		}
+		case SYS_CREATE: {
+			char* file = (char *)f->R.rdi;
+			unsigned size = (unsigned) f->R.rsi;
+
+			validate_user_addr(file);
+
+			f->R.rax = filesys_create(file, size);
 			break;
 		}
 		default:
