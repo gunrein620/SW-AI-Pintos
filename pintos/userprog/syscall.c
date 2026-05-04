@@ -11,6 +11,7 @@
 #include "intrinsic.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "devices/input.h"
 
 struct lock filesys_lock;
 
@@ -122,6 +123,51 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 			file_close(file);
 			thread_current()->fd_table[fd] = NULL;
+			lock_release(&filesys_lock);
+			break;
+		}
+
+		case SYS_READ: {
+			int      fd     = (int)      f->R.rdi;
+			void    *buffer = (void *)   f->R.rsi;
+			unsigned size   = (unsigned) f->R.rdx;
+
+			validate_user_addr(buffer);
+			lock_acquire(&filesys_lock);
+
+			if (fd < 0 || fd >= 128) {
+				f->R.rax = (uint64_t) -1;
+			} else if (fd == 0) {
+				for (unsigned i = 0; i < size; i++)
+					((char *) buffer)[i] = input_getc();
+				f->R.rax = size;
+			} else if (fd == 1) {
+				f->R.rax = (uint64_t) -1;
+			} else {
+				struct file *file = thread_current()->fd_table[fd];
+				f->R.rax = (file == NULL) ? (uint64_t) -1
+				                          : (uint64_t) file_read(file, buffer, size);
+			}
+			lock_release(&filesys_lock);
+			break;
+		}
+
+		case SYS_FILESIZE: {
+			int fd = (int) f->R.rdi;
+
+			lock_acquire(&filesys_lock);
+			if (fd < 2 || fd >= 128) {
+				f->R.rax = (uint64_t) -1;
+				lock_release(&filesys_lock);
+				break;
+			}
+			struct file *file = thread_current()->fd_table[fd];
+			if (file == NULL) {
+				f->R.rax = (uint64_t) -1;
+				lock_release(&filesys_lock);
+				break;
+			}
+			f->R.rax = file_length(file);
 			lock_release(&filesys_lock);
 			break;
 		}
