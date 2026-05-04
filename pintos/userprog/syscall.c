@@ -9,6 +9,10 @@
 #include "threads/flags.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
+
+struct lock filesys_lock;
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -28,6 +32,7 @@ void syscall_handler (struct intr_frame *);
 
 void
 syscall_init (void) {
+	lock_init(&filesys_lock);
 	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
 			((uint64_t)SEL_KCSEG) << 32);
 	write_msr(MSR_LSTAR, (uint64_t) syscall_entry);
@@ -41,8 +46,11 @@ syscall_init (void) {
 
 static void
 validate_user_addr (const void *uaddr) {
-	if (uaddr == NULL || !is_user_vaddr(uaddr))
+	if (uaddr == NULL || !is_user_vaddr(uaddr)
+	    || pml4_get_page(thread_current()->pml4, uaddr) == NULL) {
+		thread_current()->exit_status = -1;
 		thread_exit();
+	}
 }
 
 void
@@ -59,6 +67,63 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			thread_current ()->exit_status = status;
 			thread_exit ();
 			NOT_REACHED ();
+		}
+
+		case SYS_CREATE: {
+			const char *filename = (const char *) f->R.rdi;
+			unsigned    size     = (unsigned)     f->R.rsi;
+
+			validate_user_addr(filename);
+
+			lock_acquire(&filesys_lock);
+			bool success = filesys_create(filename, size);
+			lock_release(&filesys_lock);
+
+			f->R.rax = success;
+			break;
+		}
+
+		case SYS_OPEN: {
+			const char *filename = (const char *) f->R.rdi;
+
+			validate_user_addr(filename);
+
+			lock_acquire(&filesys_lock);
+			struct file *file = filesys_open(filename);
+
+			if (file == NULL) {
+				f->R.rax = (uint64_t) -1;
+				lock_release(&filesys_lock);
+				break;
+			}
+
+			thread_current()->fd_table[thread_current()->fd_next] = file;
+			f->R.rax = thread_current()->fd_next;
+			thread_current()->fd_next++;
+			lock_release(&filesys_lock);
+			break;
+		}
+
+		case SYS_CLOSE: {
+			uint64_t fd = (uint64_t) f->R.rdi;
+
+			lock_acquire(&filesys_lock);
+
+			if (fd < 2 || fd >= 128) {
+				lock_release(&filesys_lock);
+				break;
+			}
+
+			struct file *file = thread_current()->fd_table[fd];
+			if (file == NULL) {
+				lock_release(&filesys_lock);
+				break;
+			}
+
+			file_close(file);
+			thread_current()->fd_table[fd] = NULL;
+			lock_release(&filesys_lock);
+			break;
 		}
 
 		case SYS_WRITE: {

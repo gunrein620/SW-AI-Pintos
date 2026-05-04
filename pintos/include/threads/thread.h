@@ -112,6 +112,9 @@ struct thread {
 	struct list_elem child_elem;
 	struct semaphore wait_sema;
 	struct semaphore exit_sema;
+
+	struct file *fd_table[128];
+	int fd_next;
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
