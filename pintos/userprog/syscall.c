@@ -11,9 +11,13 @@
 #include "threads/vaddr.h"
 #include "threads/mmu.h"
 #include "intrinsic.h"
+#include "filesys/filesys.h"
+#include "threads/mmu.h"
+#include "threads/synch.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+static struct lock filesys_lock;
 
 /* System call.
  *
@@ -39,6 +43,8 @@ syscall_init (void) {
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+	
+	lock_init (&filesys_lock);
 }
 
 static void
@@ -46,6 +52,16 @@ validate_user_addr (const void *uaddr) {
 	if (uaddr == NULL || !is_user_vaddr(uaddr) || pml4_get_page(thread_current()->pml4, uaddr) == NULL) {
 		thread_current()->exit_status = -1;
 		thread_exit();
+	}
+}
+
+static void
+validate_user_string (const char *str) {
+	while (true) {
+		validate_user_addr (str);
+		if (*str == '\0')
+			return;
+		str++;
 	}
 }
 
@@ -82,13 +98,18 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		}
 		case SYS_CREATE: {
 			char* file = (char *)f->R.rdi;
-			unsigned size = (unsigned) f->R.rsi;
+			unsigned initial_size = (unsigned) f->R.rsi;
 
 			validate_user_addr(file);
 
-			f->R.rax = filesys_create(file, size);
+			lock_acquire (&filesys_lock);
+			bool success = filesys_create (file, initial_size);
+			lock_release (&filesys_lock);
+		
+			f->R.rax = success;
 			break;
 		}
+
 		default:
 			printf("unhandled syscall: %llu\n",
 			       (unsigned long long) sysno);
