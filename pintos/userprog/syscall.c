@@ -14,6 +14,7 @@
 #include "threads/mmu.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
+#include "filesys/file.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -81,6 +82,23 @@ add_file_to_fdt(struct file *file) {
 	return entry->fd;
 }
 
+static struct fd_entry *
+find_fd(int fd) {
+	struct thread *curr = thread_current();
+	struct list *fdt = &curr->fd_table;
+	struct list_elem *e;
+
+	for (e = list_begin(fdt); e != list_end(fdt); e = list_next(e)) {
+		struct fd_entry *entry = list_entry(e, struct fd_entry, elem);
+
+		if (entry->fd == fd) {
+			return entry;
+		}
+	}
+
+	return NULL;
+}
+
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	uint64_t sysno = f->R.rax;
@@ -140,6 +158,25 @@ syscall_handler (struct intr_frame *f UNUSED) {
 					file_close(file);
 				f->R.rax = fd;
 			}
+			lock_release (&filesys_lock);
+
+			break;
+		}
+		case SYS_CLOSE: {
+			uint64_t fd = (uint64_t)f->R.rdi;
+
+			lock_acquire (&filesys_lock);
+
+			struct fd_entry *entry = find_fd(fd);
+			if (entry == NULL) {
+				lock_release(&filesys_lock);
+				break;
+			}
+
+			file_close(entry->file);
+			list_remove(&entry->elem);
+			free(entry);
+
 			lock_release (&filesys_lock);
 
 			break;
