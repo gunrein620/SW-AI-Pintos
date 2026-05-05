@@ -6,15 +6,22 @@
 #include "threads/loader.h"
 #include "threads/init.h"
 #include "userprog/gdt.h"
+#include "filesys/filesys.h"
 #include "threads/flags.h"
 #include "threads/vaddr.h"
+#include "threads/mmu.h"
 #include "intrinsic.h"
 #include "filesys/filesys.h"
 #include "threads/mmu.h"
+<<<<<<< HEAD
 
+=======
+#include "threads/synch.h"
+>>>>>>> 862ec7996cdfefd11572d16eb74f0b691bbc1b16
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+static struct lock filesys_lock;
 
 /* System call.
  *
@@ -40,14 +47,23 @@ syscall_init (void) {
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+	
+	lock_init (&filesys_lock);
 }
 
 static void
 validate_user_addr (const void *uaddr) {
+<<<<<<< HEAD
     if (uaddr == NULL || !is_user_vaddr(uaddr) || pml4_get_page(thread_current()->pml4, uaddr) == NULL) {
         thread_current ()->exit_status = -1;
         thread_exit ();
     }
+=======
+	if (uaddr == NULL || !is_user_vaddr(uaddr) || pml4_get_page(thread_current()->pml4, uaddr) == NULL) {
+		thread_current()->exit_status = -1;
+		thread_exit();
+	}
+>>>>>>> 862ec7996cdfefd11572d16eb74f0b691bbc1b16
 }
 
 static void
@@ -92,13 +108,19 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 		}
 		case SYS_CREATE: {
-			const char *file = (const char *) f->R.rdi;
+			char* file = (char *)f->R.rdi;
 			unsigned initial_size = (unsigned) f->R.rsi;
 
-			validate_user_addr (file);
-			f->R.rax = filesys_create (file, initial_size);
+			validate_user_addr(file);
+
+			lock_acquire (&filesys_lock);
+			bool success = filesys_create (file, initial_size);
+			lock_release (&filesys_lock);
+		
+			f->R.rax = success;
 			break;
 		}
+
 		case SYS_OPEN: {
 			const char *file = (const char *) f->R.rdi;
 			struct thread *cur = thread_current ();
@@ -127,7 +149,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			f->R.rax = fd;
 			break;
 		}
- 
 		default:
 			printf("unhandled syscall: %llu\n",
 			       (unsigned long long) sysno);
