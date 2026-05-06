@@ -473,6 +473,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	list_init(&t->donations);         /* donation 리스트 초기화 */
 #ifdef USERPROG
 	list_init (&t->children);
+	list_init (&t->fd_table);
 	sema_init (&t->wait_sema, 0);
 	sema_init (&t->exit_sema, 0);
 	t->parent = NULL;
