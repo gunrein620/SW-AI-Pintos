@@ -13,11 +13,7 @@
 #include "intrinsic.h"
 #include "filesys/filesys.h"
 #include "threads/mmu.h"
-<<<<<<< HEAD
-
-=======
 #include "threads/synch.h"
->>>>>>> 862ec7996cdfefd11572d16eb74f0b691bbc1b16
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -53,17 +49,10 @@ syscall_init (void) {
 
 static void
 validate_user_addr (const void *uaddr) {
-<<<<<<< HEAD
-    if (uaddr == NULL || !is_user_vaddr(uaddr) || pml4_get_page(thread_current()->pml4, uaddr) == NULL) {
-        thread_current ()->exit_status = -1;
-        thread_exit ();
-    }
-=======
 	if (uaddr == NULL || !is_user_vaddr(uaddr) || pml4_get_page(thread_current()->pml4, uaddr) == NULL) {
 		thread_current()->exit_status = -1;
 		thread_exit();
 	}
->>>>>>> 862ec7996cdfefd11572d16eb74f0b691bbc1b16
 }
 
 static void
@@ -149,7 +138,27 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			f->R.rax = fd;
 			break;
 		}
+		case SYS_CLOSE: {
+			int fd = (int) f->R.rdi;
+			struct thread *cur = thread_current ();
+
+			if (fd < 0 || fd >= FD_MAX) {
+				break;
+			}
+
+			if (cur->fd_table[fd] == NULL) {
+				break;
+			}
+
+			struct file *file = cur->fd_table[fd];
+			cur->fd_table[fd] = NULL;
+			file_close (file);
+
+			break;
+		}
+
 		default:
+
 			printf("unhandled syscall: %llu\n",
 			       (unsigned long long) sysno);
 			thread_exit();
