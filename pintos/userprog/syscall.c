@@ -1,3 +1,4 @@
+#include "filesys/file.h"
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
@@ -19,6 +20,12 @@ struct lock filesys_lock;
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+static struct lock filesys_lock;
+struct fd_entry {
+	int fd;
+	struct file *file;
+	struct list_elem elem;
+};
 
 /* System call.
  *
@@ -32,6 +39,7 @@ void syscall_handler (struct intr_frame *);
 #define MSR_STAR 0xc0000081         /* Segment selector msr */
 #define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
+#define FD_MAX 128
 
 void
 syscall_init (void) {
@@ -46,6 +54,8 @@ syscall_init (void) {
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+	
+	lock_init (&filesys_lock);
 }
 
 /* stage 0 최소 메모리 검증.

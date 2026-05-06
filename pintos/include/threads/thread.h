@@ -10,6 +10,7 @@
 #include "vm/vm.h"
 #endif
 
+struct file;
 
 /* States in a thread's life cycle. */
 enum thread_status {
@@ -23,6 +24,7 @@ enum thread_status {
    You can redefine this to whatever type you like. */
 typedef int tid_t;
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
+#define FD_MAX 128
 
 /* Thread priorities. */
 #define PRI_MIN 0                       /* Lowest priority. */

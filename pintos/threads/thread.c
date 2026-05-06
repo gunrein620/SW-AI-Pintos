@@ -478,6 +478,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	/* process_wait/exit 동기화 자료 초기화.
 	 * 모든 스레드(initial_thread 포함)가 children/sema를 갖도록 보장한다. */
 	list_init (&t->children);
+	list_init (&t->fd_table);
 	sema_init (&t->wait_sema, 0);
 	sema_init (&t->exit_sema, 0);
 	sema_init (&t->fork_sema, 0);
