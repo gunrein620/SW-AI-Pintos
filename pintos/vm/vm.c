@@ -62,10 +62,11 @@ err:
 
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
-spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
+spt_find_page (struct supplemental_page_table *spt, void *va) {
 	struct page *page = NULL;
 	/* TODO: Fill this function. */
-
+	// spt 에서 해시테이블로 들어가서 가상주소를 찾는다. 그러고 hash_entry
+	
 	return page;
 }
 
@@ -173,8 +174,30 @@ vm_do_claim_page (struct page *page) {
 
 /* Initialize new supplemental page table */
 void
-supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+supplemental_page_table_init (struct supplemental_page_table *spt) {
+	hash_init (&spt->spt_pages,
+		page_hash, page_less, NULL); // 가상주소를 버킷에 넣기, 가상주소의 순서 비교
+	}
+
+uint64_t
+page_hash(const struct hash_elem *e, void *aux) { // 가상주소를 버킷에 넣기
+	const struct page *p = hash_entry(e, struct page, hash_elem);
+	const void *buf_ = &p->va;
+	size_t size = sizeof(p->va); 
+	return hash_bytes (buf_, size);
 }
+
+bool
+page_less(const struct hash_elem *a, const struct hash_elem *b,
+		void *aux) {
+			const struct page *pa = hash_entry(a, struct page, hash_elem);
+			const struct page *pb = hash_entry(b, struct page, hash_elem);
+			
+			return pa->va < pb->va;
+		}
+
+
+
 
 /* Copy supplemental page table from src to dst */
 bool
