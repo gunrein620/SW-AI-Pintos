@@ -64,9 +64,11 @@ err:
 struct page *
 spt_find_page (struct supplemental_page_table *spt, void *va) {
 	struct page *page = NULL;
+	struct hash_elem *e;
 	/* TODO: Fill this function. */
 	// spt 에서 해시테이블로 들어가서 가상주소를 찾는다. 그러고 hash_entry
-	
+	struct hash spt_pages = spt->spt_pages;
+	e = hash_find(spt_pages, )
 	return page;
 }
 
