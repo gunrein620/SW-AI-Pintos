@@ -28,6 +28,7 @@ enum vm_type {
 #include "vm/uninit.h"
 #include "vm/anon.h"
 #include "vm/file.h"
+#include "hash.h"
 #ifdef EFILESYS
 #include "filesys/page_cache.h"
 #endif
@@ -59,6 +60,8 @@ struct page {
 		struct page_cache page_cache;
 #endif
 	};
+	struct hash_elem hash_elem; // 해시 테이블에 넣기 위한 연결고리
+	bool writable;
 };
 
 /* The representation of "frame" */
@@ -87,7 +90,7 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
-	struct hash spt_pages;
+	struct hash spt_pages; // 해시테이블 구조체 선언
 };
 
 #include "threads/thread.h"
