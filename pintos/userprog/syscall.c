@@ -15,12 +15,13 @@
 #include "devices/input.h"      /* input_getc() — SYS_READ stdin 분기에서 사용 */
 #include "threads/palloc.h" 	/* SYS_EXEC 에서 palloc_get_page() 인자로 넣을 떄 PAL_ZERO 필요*/
 
+
 /* 파일 시스템 락 선언 */
 struct lock filesys_lock;
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
-static struct lock filesys_lock;
+// static struct lock filesys_lock;
 struct fd_entry {
 	int fd;
 	struct file *file;
@@ -44,7 +45,7 @@ struct fd_entry {
 void
 syscall_init (void) {
 
-	lock_init(&filesys_lock);
+	//lock_init(&filesys_lock);
 	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
 			((uint64_t)SEL_KCSEG) << 32);
 	write_msr(MSR_LSTAR, (uint64_t) syscall_entry);
