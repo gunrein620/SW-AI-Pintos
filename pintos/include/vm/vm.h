@@ -59,6 +59,7 @@ struct page {
 #endif
 	};
 	struct hash_elem hash_elem; // 해시 테이블에 넣기 위한 연결고리
+	bool writable;
 };
 
 /* The representation of "frame" */
