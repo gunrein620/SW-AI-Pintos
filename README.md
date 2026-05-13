@@ -3,6 +3,11 @@
 [진행사항]
 gtkim: vm 개념공부(youtube)
 
+kwpark: vm공부
+
+jhkim: VM 공부 진행중
+
+sikim: VM 개념공부 / 코드 부분 미흡
 
 # 📘 Docker기반 Pintos 개발 환경 구축 가이드 
 
