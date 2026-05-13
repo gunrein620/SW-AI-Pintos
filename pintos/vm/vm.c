@@ -36,6 +36,24 @@ page_get_type (struct page *page) {
 static struct frame *vm_get_victim (void);
 static bool vm_do_claim_page (struct page *page);
 static struct frame *vm_evict_frame (void);
+static uint64_t page_hash (const struct hash_elem *e, void *aux);
+static bool page_less (const struct hash_elem *a,
+        const struct hash_elem *b, void *aux);
+
+static uint64_t
+page_hash (const struct hash_elem *e, void *aux UNUSED) {
+    const struct page *page = hash_entry (e, struct page, hash_elem);
+
+    return hash_bytes (&page->va, sizeof page->va);
+}
+
+static bool
+page_less (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED) {
+    const struct page *page_a = hash_entry (a, struct page, hash_elem);
+    const struct page *page_b = hash_entry (b, struct page, hash_elem);
+
+    return (uint64_t) page_a->va < (uint64_t) page_b->va;
+} 
 
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
