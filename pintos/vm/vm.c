@@ -6,9 +6,6 @@
 #include "vm/file.h"
 #include "threads/mmu.h"
 
-uint64_t page_hash(const struct hash_elem *e, void *aux);
-bool page_less(const struct hash_elem *a, const struct hash_elem *b, void *aux);
-
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
@@ -67,7 +64,7 @@ bool
 vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		vm_initializer *init, void *aux) {
 
-	ASSERT (VM_TYPE(type) != VM_UNINIT) // type = UNINIT 면 종료
+	ASSERT (VM_TYPE(type) != VM_UNINIT); // type = UNINIT 면 종료
 
 	struct supplemental_page_table *spt = &thread_current ()->spt; // spt 선언
 	upage = pg_round_down(upage); // 유저 페이지 주소를 시작주소로 맞춤
@@ -114,7 +111,7 @@ spt_find_page (struct supplemental_page_table *spt, void *va) {
  // 해시테이블과 temp_p의 hash_elem 으로 page의 hash_elem 반환
 	struct hash_elem *e = hash_find(&spt->spt_pages, &temp_p.hash_elem);
 	if (e == NULL)	// 해당 페이지가 없다면 NULL 반환
-		return false;
+		return NULL;
 	page = hash_entry(e, struct page, hash_elem); // 페이지의 주소 반환
 	return page;
 }
@@ -132,8 +129,8 @@ spt_insert_page (struct supplemental_page_table *spt,
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
-	vm_dealloc_page (page);
-	return true;
+    hash_delete (&spt->spt_pages, &page->hash_elem);
+    vm_dealloc_page (page);
 }
 
 /* Get the struct frame, that will be evicted. */
