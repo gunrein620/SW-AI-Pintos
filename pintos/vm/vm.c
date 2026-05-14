@@ -60,41 +60,40 @@ page_less (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSE
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
-bool
-vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
-		vm_initializer *init, void *aux) {
-
-	ASSERT (VM_TYPE(type) != VM_UNINIT); // type = UNINIT 면 종료
-
-	struct supplemental_page_table *spt = &thread_current ()->spt; // spt 선언
-	upage = pg_round_down(upage); // 유저 페이지 주소를 시작주소로 맞춤
-	
-	if (spt_find_page (spt, upage) == NULL) { // page 가 spt 안에 존재하지 않는다
-
-		struct page *page = (struct page *)malloc(sizeof(struct page)); // page 구조체 메모리 할당
-		if (page == NULL) // 할당받지 못한다면 NULL 반환
-			return false;
-
-		if (VM_TYPE(type) == VM_ANON) { // anon 타입일때
-			uninit_new(page, upage, init, type, aux, anon_initializer); // anon_initializer 실행
-		} 
-		else if (VM_TYPE(type) == VM_FILE){ // file 타입일때
-			uninit_new(page, upage, init, type, aux, file_backed_initializer); // file_backed_initializer 실행
-		}
-		else goto err; // 그 외 타입이라면 err 로 이동
-
-		page->writable = writable; // writable 상태로 설정
-
-		if (spt_insert_page(spt, page) == false) // spt 에 page 삽입이 실패하면
-			goto err; // err 로 이동
-
-			return true; // err 를 통과한다면 true 반환
-
-			err: free(page); // 올바르지 않은 동작이므로 메모리 해제
-			return false;
-		}
-		return false;
-}
+ bool
+ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
+		 vm_initializer *init, void *aux) {
+ 
+	 ASSERT (VM_TYPE(type) != VM_UNINIT); // UNINIT 타입은 직접 할당하지 않음
+ 
+	 struct supplemental_page_table *spt = &thread_current ()->spt; // 현재 스레드의 SPT 가져오기
+	 upage = pg_round_down (upage); // va를 page 시작주소로 정렬
+ 
+	 if (spt_find_page (spt, upage) != NULL) // 이미 같은 va의 page가 있으면 실패
+		 return false;
+ 
+	 struct page *page = malloc (sizeof *page); // SPT에 넣을 page 예약증 생성
+	 if (page == NULL) // page 구조체 할당 실패
+		 return false;
+ 
+	 if (VM_TYPE (type) == VM_ANON) // 익명 페이지면 anon 초기화 함수 연결
+		 uninit_new (page, upage, init, type, aux, anon_initializer);
+	 else if (VM_TYPE (type) == VM_FILE) // 파일 기반 페이지면 file 초기화 함수 연결
+		 uninit_new (page, upage, init, type, aux, file_backed_initializer);
+	 else // 지원하지 않는 타입이면 실패
+		 goto err;
+ 
+	 page->writable = writable; // uninit_new가 page를 덮어쓴 뒤 권한 저장
+ 
+	 if (!spt_insert_page (spt, page)) // SPT에 page 예약증 삽입
+		 goto err;
+ 
+	 return true; // 예약 성공
+ 
+ err:
+	 free (page); // 실패 시 방금 만든 page 예약증 해제
+	 return false;
+ }
 	
 		/* TODO: Create the page, fetch the initialier according to the VM type,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
@@ -210,11 +209,14 @@ vm_dealloc_page (struct page *page) {
 
 /* Claim the page that allocate on VA. */
 bool
-vm_claim_page (void *va UNUSED) {
-	struct page *page = NULL;
-	/* TODO: Fill this function */
+vm_claim_page (void *va) { // va에 해당하는 page를 실제 frame에 연결하는 함수
+	struct supplemental_page_table *spt = &thread_current ()->spt; // 현재 스레드의 SPT 가져오기
+	struct page *page = spt_find_page (spt, va); // SPT에서 va에 해당하는 page 예약증 찾기
 
-	return vm_do_claim_page (page);
+	if (page == NULL) // 예약된 page가 없으면 처리 불가
+		return false; // 잘못된 주소 접근이므로 실패 반환
+
+	return vm_do_claim_page (page); // 찾은 page에 frame을 붙이고 PML4에 매핑
 }
 
 /* Claim the PAGE and set up the mmu. */
