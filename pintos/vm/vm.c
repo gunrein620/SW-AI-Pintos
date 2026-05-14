@@ -75,8 +75,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		if (page == NULL) // 할당받지 못한다면 NULL 반환
 			return false;
 
-		page->writable = writable; // writable 상태로 설정
-
 		if (VM_TYPE(type) == VM_ANON) { // anon 타입일때
 			uninit_new(page, upage, init, type, aux, anon_initializer); // anon_initializer 실행
 		} 
@@ -84,6 +82,8 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			uninit_new(page, upage, init, type, aux, file_backed_initializer); // file_backed_initializer 실행
 		}
 		else goto err; // 그 외 타입이라면 err 로 이동
+
+		page->writable = writable; // writable 상태로 설정
 
 		if (spt_insert_page(spt, page) == false) // spt 에 page 삽입이 실패하면
 			goto err; // err 로 이동
@@ -221,18 +221,18 @@ vm_claim_page (void *va UNUSED) {
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
-	if (frame == NULL) { // 프레임을 받아오지 못하면 false 반환
+	if (frame == NULL) {	 // 사용 가능한 프레임을 얻지 못하면 false
 		return false;
 	}
-	frame->page = page;
+	frame->page = page;		// frame 과 page 서로 연결
 	page->frame = frame;
 
-	if (pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable) == false) {
-		palloc_free_page(frame->kva);
+	if (pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable) == false) {		// 가상주소를 물리프레임에 매핑하지 못하면 실패
+		palloc_free_page(frame->kva);		// 실패했다면 free
 		free(frame);
 		return false;
 	}
-	return swap_in(page, frame->kva);
+	return swap_in(page, frame->kva);	// page 타입에 맞게 프레임에 실제 내용을 로드
 }
 
 /* Initialize new supplemental page table */
