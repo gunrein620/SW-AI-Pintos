@@ -210,16 +210,14 @@ vm_dealloc_page (struct page *page) {
 
 /* Claim the page that allocate on VA. */
 bool
-vm_claim_page (void *va UNUSED) {
-	struct page *page = NULL;
-	/* TODO: Fill this function */
-	struct supplemental_page_table *spt = &thread_current ()->spt;
-	struct page *page =spt_find_page(spt, va);
+vm_claim_page (void *va) { // va에 해당하는 page를 실제 frame에 연결하는 함수
+	struct supplemental_page_table *spt = &thread_current ()->spt; // 현재 스레드의 SPT 가져오기
+	struct page *page = spt_find_page (spt, va); // SPT에서 va에 해당하는 page 예약증 찾기
 
-	if (page == NULL)
-		return false;
+	if (page == NULL) // 예약된 page가 없으면 처리 불가
+		return false; // 잘못된 주소 접근이므로 실패 반환
 
-	return vm_do_claim_page (page);
+	return vm_do_claim_page (page); // 찾은 page에 frame을 붙이고 PML4에 매핑
 }
 
 /* Claim the PAGE and set up the mmu. */
