@@ -196,7 +196,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 	if (addr == NULL) // NULL 주소 접근은 처리 불가
-	return false;
+		return false;
 
 	if (!is_user_vaddr (addr)) // 유저 영역 주소가 아니면 처리 불가
 		return false;
