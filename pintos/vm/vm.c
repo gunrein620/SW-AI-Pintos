@@ -4,6 +4,7 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "threads/vaddr.h"
+#include "threads/mmu.h"
 
 static struct list frame_table; // frame은 전역 변수로 관리
 
@@ -159,6 +160,7 @@ vm_get_frame (void) {
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
 
+	/* 커널 힙에 프레임에 대한 메타데이터 저장 */
 	frame = malloc(sizeof(struct frame));
 	if (frame == NULL) {
 		return NULL;
@@ -170,8 +172,10 @@ vm_get_frame (void) {
 		return NULL;
 	}
 
+	/* 아직 page는 매핑되지 않음 */
 	frame->page = NULL;
 	
+	/* frame_table에 넣어두기 */
 	list_push_back(&frame_table, &frame->frame_elem);
 
 	ASSERT (frame != NULL);
@@ -197,6 +201,21 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
+
+	/* 주소 확인 */
+	if (addr == NULL || is_kernel_vaddr(addr)) {
+		return false;
+	}
+
+	/* not_present가 false인지 확인 */
+	if (not_present == false) {
+		return false;
+	}
+
+	page = spt_find_page(spt, addr);
+	if (page == NULL) {
+		return false;
+	}
 
 	return vm_do_claim_page (page);
 }
@@ -231,12 +250,26 @@ vm_claim_page (void *va UNUSED) {
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
+	if (!frame) {
+		return false;
+	}
+
+	struct thread *thread = thread_current();
 
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	/* 실제로 pml4에서 매핑하는 과정 / 실패하면 정리한 뒤 false */
+	if (!pml4_set_page(thread->pml4, page->va, frame->kva, page->writable)) {
+		/* 실패 했을 때, 위에서 set_page 하면서 연결된 것들을 정리해야함. */
+		page->frame = NULL;
+		palloc_free_page(frame->kva);
+		list_remove(&frame->frame_elem);
+		free(frame);
+		return false;
+	}
 
 	return swap_in (page, frame->kva);
 }
