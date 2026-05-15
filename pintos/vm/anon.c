@@ -28,9 +28,9 @@ vm_anon_init (void) {
 bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
-	page->operations = &anon_ops;
-
-	struct anon_page *anon_page = &page->anon;
+	page->operations = &anon_ops;		// page의 operations를 anon_ops로 바꿈
+	struct anon_page *anon_page = &page->anon; 	// anon_page 초기 상태 세팅
+	return true;
 }
 
 /* Swap in the page by read contents from the swap disk. */

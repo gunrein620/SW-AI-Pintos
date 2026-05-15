@@ -189,16 +189,23 @@ vm_handle_wp (struct page *page UNUSED) {
 
 /* Return true on success */
 bool
-vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
-		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
+vm_try_handle_fault (struct intr_frame *f, void *addr,
+		bool user, bool write, bool not_present) {
+	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
-	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
-
-	return vm_do_claim_page (page);
-}
-
+	if (addr == NULL || is_kernel_vaddr(addr) || !not_present) { // addr 이 존재하지 않거나 커널 주소이거나 권한 오류라면 false
+		return false;
+	}
+	page = spt_find_page(spt, addr);
+	if (page != NULL) { 	// spt 에 page 가 있는 경우를 검사
+		if (write == true && page->writable == false) { 	// write 로 접근했는데 writable 가 false 면 false 반환
+			return false;
+		}	
+		return vm_do_claim_page (page);	// page 가 있고 위의 조건을 통과한다면 호출
+		}
+	return false;
+	}
+	
 /* Free the page.
  * DO NOT MODIFY THIS FUNCTION. */
 void
