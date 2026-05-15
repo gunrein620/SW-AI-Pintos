@@ -188,13 +188,28 @@ vm_handle_wp (struct page *page UNUSED) {
 }
 
 /* Return true on success */
-bool
-vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
-		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
+bool //역할: page fault 난 주소를 SPT에서 확인하고, 복구 가능한 fault면 frame을 붙이는 입구
+vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr, 
+	bool user UNUSED, bool write, bool not_present) {
+	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
+	if (addr == NULL) // NULL 주소 접근은 처리 불가
+	return false;
+
+	if (!is_user_vaddr (addr)) // 유저 영역 주소가 아니면 처리 불가
+		return false;
+
+	if (!not_present) // 이미 존재하는 page의 권한 위반은 아직 처리하지 않음
+		return false;
+
+	page = spt_find_page (spt, addr); // SPT에서 fault 주소의 page 예약증 찾기
+	if (page == NULL) // 예약된 page가 없으면 처리 불가
+		return false;
+
+	if (write && !page->writable) // 쓰기 fault인데 writable이 아니면 처리 불가
+		return false;
 
 	return vm_do_claim_page (page);
 }
