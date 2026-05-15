@@ -5,7 +5,7 @@
 #include "vm/inspect.h"
 #include "threads/vaddr.h"
 
-static struct list frame_table;
+static struct list frame_table; // frame은 전역 변수로 관리
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -19,7 +19,7 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
-	list_init (&frame_table);
+	list_init (&frame_table); // frame_table init
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -54,8 +54,8 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 	ASSERT (VM_TYPE(type) != VM_UNINIT)
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
-	/* 가상주소를 미리 page의 시작 주소로 */
-	upage = pg_round_down(upage);
+
+	upage = pg_round_down(upage); // 가상주소를 미리 page의 시작 주소로 
 
 	/* Check wheter the upage is already occupied or not. */
 	if (spt_find_page (spt, upage) == NULL) {
@@ -68,8 +68,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			goto err;
 		}
 
-		/* VM_TYPE에 맞춰서 uninit_new 호출 */
-		if (VM_TYPE(type) == VM_ANON) {
+		if (VM_TYPE(type) == VM_ANON) { // VM_TYPE에 맞춰서 uninit_new 호출
 			uninit_new(page, upage, init, type, aux, anon_initializer);
 		} else if (VM_TYPE(type) == VM_FILE) {
 			uninit_new(page, upage, init, type, aux, file_backed_initializer);
@@ -78,12 +77,10 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			goto err;
 		}
 
-		/* writable에 대한 값도 미리 저장 */
-		page->writable = writable;
+		page->writable = writable; // writable에 대한 값도 미리 저장
 		
 		/* TODO: Insert the page into the spt. */
-		/* spt에 page를 저장하는데 실패하면 free 해주고, err로 */
-		if (!spt_insert_page(spt, page)) {
+		if (!spt_insert_page(spt, page)) { // spt에 page를 저장하는데 실패하면 free 해주고, err로
 			free(page);
 			goto err;
 		}
@@ -97,21 +94,19 @@ err:
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
-	/* 임시 페이지를 만들어서 spt의 page를 찾는다. */
-	struct page temp;
+
+	struct page temp; // 임시 페이지를 만들어서 spt의 page를 찾는다.
 	struct hash_elem *hash_elem;
 	/* TODO: Fill this function. */
 
-	/* page의 시작 주소를 넣어야 하므로 page_round_down() 사용 */
-	temp.va = pg_round_down(va);
-	/* hash table 안에 페이지가 있는지 확인 */
-	hash_elem = hash_find(&spt->spt_pages, &temp.hash_elem);
-	/* 만약 hash_find의 결과가 NULL 이라면 hash_entry를 했을 때 터지니까 미리 방지 */
-	if (hash_elem == NULL) {
+	temp.va = pg_round_down(va); // page의 시작 주소를 넣어야 하므로 page_round_down() 사용
+	hash_elem = hash_find(&spt->spt_pages, &temp.hash_elem); // hash table 안에 페이지가 있는지 확인
+
+	if (hash_elem == NULL) { // 만약 hash_find의 결과가 NULL 이라면 hash_entry를 했을 때 터지니까 미리 방지
 		return NULL;
 	}
-	/* 실제 페이지 가져오기 */
-	page = hash_entry(hash_elem, struct page, hash_elem);
+
+	page = hash_entry(hash_elem, struct page, hash_elem); // 실제 페이지 가져오기
 
 	return page;
 }
@@ -122,10 +117,8 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
 	/* TODO: Fill this function. */
-
-	/* hash_insert를 해서 NULL을 반환하면, 기존에 있던 값이 없다는 의미로 성공했다는 의미
-	 * 그래서 NULL 이라면 succ를 true로 바꾸고, 아니라면 기존의 false를 사용. */
-	if (hash_insert(&spt->spt_pages, &page->hash_elem) == NULL) {
+	
+	if (hash_insert(&spt->spt_pages, &page->hash_elem) == NULL) { // hash_insert를 해서 NULL을 반환하면, 기존에 있던 값이 없다는 의미로 성공했다는 의미, 그래서 NULL 이라면 succ를 true로 바꾸고, 아니라면 기존의 false를 사용.
 		succ = true;
 	}
 	
@@ -170,8 +163,8 @@ vm_get_frame (void) {
 	if (frame == NULL) {
 		return NULL;
 	}
-	/* 물리 메모리 1개 받아오기 */
-	frame->kva = palloc_get_page(PAL_USER);
+
+	frame->kva = palloc_get_page(PAL_USER); // 물리 메모리 1개 받아오기
 	if (!frame->kva) {
 		free(frame);
 		return NULL;
@@ -222,15 +215,12 @@ vm_claim_page (void *va UNUSED) {
 	struct page *page;
 	/* TODO: Fill this function */
 
-	/* 현재 스레드의 spt 가져오기 */
 	struct thread *thread = thread_current();
-	struct supplemental_page_table *spt = &thread->spt;
+	struct supplemental_page_table *spt = &thread->spt; // 현재 스레드의 spt 가져오기
 
-	/* 가져온 spt와 매개변수로 받은 va를 활용해서 page 찾기 */
-	page = spt_find_page(spt, va);
+	page = spt_find_page(spt, va); // 가져온 spt와 매개변수로 받은 va를 활용해서 page 찾기
 
-	/* 만약 page가 NULL 이라면 실패 반환 */
-	if (!page) {
+	if (!page) { // 만약 page가 NULL 이라면 실패 반환
 		return false;
 	}
 
@@ -254,9 +244,7 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-	/* SPT에서 쓸 hash table init 
-	 * 이 과정에서 page_hash, page_less 함수를 밑에 구현. */
-	hash_init(&spt->spt_pages, page_hash, page_less, NULL);
+	hash_init(&spt->spt_pages, page_hash, page_less, NULL); // SPT에서 쓸 hash table init
 }
 
 /* Copy supplemental page table from src to dst */
