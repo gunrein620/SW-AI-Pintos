@@ -4,7 +4,10 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "vm/file.h"
+#include "threads/vaddr.h"
 #include "threads/mmu.h"
+
+static struct list frame_table; // frame은 전역 변수로 관리
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -18,6 +21,7 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+	list_init (&frame_table); // frame_table init
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -102,16 +106,21 @@ page_less (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSE
 
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
-spt_find_page (struct supplemental_page_table *spt, void *va) {
-	struct page *page = NULL; 
-	struct page temp_p; // 임시 페이지
-	temp_p.va = pg_round_down(va); // 임시 페이지에 주소 삽입
+spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
+	struct page *page = NULL;
 
- // 해시테이블과 temp_p의 hash_elem 으로 page의 hash_elem 반환
-	struct hash_elem *e = hash_find(&spt->spt_pages, &temp_p.hash_elem);
-	if (e == NULL)	// 해당 페이지가 없다면 NULL 반환
+	struct page temp; // 임시 페이지를 만들어서 spt의 page를 찾는다.
+	struct hash_elem *hash_elem;
+	/* TODO: Fill this function. */
+
+	temp.va = pg_round_down(va); // page의 시작 주소를 넣어야 하므로 page_round_down() 사용
+	hash_elem = hash_find(&spt->spt_pages, &temp.hash_elem); // hash table 안에 페이지가 있는지 확인
+
+	if (hash_elem == NULL) { // 만약 hash_find의 결과가 NULL 이라면 hash_entry를 했을 때 터지니까 미리 방지
 		return NULL;
-	page = hash_entry(e, struct page, hash_elem); // 페이지의 주소 반환
+	}
+
+	page = hash_entry(hash_elem, struct page, hash_elem); // 실제 페이지 가져오기
 	return page;
 }
 
