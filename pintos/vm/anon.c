@@ -26,11 +26,12 @@ vm_anon_init (void) {
 
 /* Initialize the file mapping */
 bool
-anon_initializer (struct page *page, enum vm_type type, void *kva) {
-	/* Set up the handler */
-	page->operations = &anon_ops;
+anon_initializer (struct page *page, enum vm_type type UNUSED, void *kva UNUSED) {
+	page->operations = &anon_ops; // page를 anonymous page 동작 테이블로 전환
 
-	struct anon_page *anon_page = &page->anon;
+	struct anon_page *anon_page UNUSED = &page->anon; // anon 전용 데이터 영역 접근
+
+	return true; // anonymous page 초기화 성공~ 
 }
 
 /* Swap in the page by read contents from the swap disk. */
