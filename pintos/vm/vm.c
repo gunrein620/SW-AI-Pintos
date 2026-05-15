@@ -188,24 +188,32 @@ vm_handle_wp (struct page *page UNUSED) {
 }
 
 /* Return true on success */
-bool
-vm_try_handle_fault (struct intr_frame *f, void *addr,
-		bool user, bool write, bool not_present) {
+bool //역할: page fault 난 주소를 SPT에서 확인하고, 복구 가능한 fault면 frame을 붙이는 입구
+vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr, 
+	bool user UNUSED, bool write, bool not_present) {
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
-	if (addr == NULL || is_kernel_vaddr(addr) || !not_present) { // addr 이 존재하지 않거나 커널 주소이거나 권한 오류라면 false
+	/* TODO: Validate the fault */
+	/* TODO: Your code goes here */
+	if (addr == NULL) // NULL 주소 접근은 처리 불가
 		return false;
-	}
-	page = spt_find_page(spt, addr);
-	if (page != NULL) { 	// spt 에 page 가 있는 경우를 검사
-		if (write == true && page->writable == false) { 	// write 로 접근했는데 writable 가 false 면 false 반환
-			return false;
-		}	
-		return vm_do_claim_page (page);	// page 가 있고 위의 조건을 통과한다면 호출
-		}
-	return false;
-	}
-	
+
+	if (!is_user_vaddr (addr)) // 유저 영역 주소가 아니면 처리 불가
+		return false;
+
+	if (!not_present) // 이미 존재하는 page의 권한 위반은 아직 처리하지 않음
+		return false;
+
+	page = spt_find_page (spt, addr); // SPT에서 fault 주소의 page 예약증 찾기
+	if (page == NULL) // 예약된 page가 없으면 처리 불가
+		return false;
+
+	if (write && !page->writable) // 쓰기 fault인데 writable이 아니면 처리 불가
+		return false;
+
+	return vm_do_claim_page (page);
+}
+
 /* Free the page.
  * DO NOT MODIFY THIS FUNCTION. */
 void
